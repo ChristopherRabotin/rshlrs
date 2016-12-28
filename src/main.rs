@@ -1,3 +1,4 @@
+#![feature(loop_break_value)]
 extern crate bufstream;
 
 use std::net::{TcpListener, TcpStream};
@@ -13,25 +14,28 @@ fn main(){
         match stream {
             Err(why) => println!("accept err {}", why.description()),
             Ok(stream) => {
-                handler(&mut BufStream::new(stream));
+                if handler(&mut BufStream::new(stream)){
+                    break
+                }
             }
         }
     }
 }
 
 fn echo_err(why: std::io::Error, s: &mut BufStream<TcpStream>)-> std::io::Result<()>{
-    s.write_all(why.description().as_bytes());
-    s.write_all(b"\n")
+    try!(s.write_all(why.description().as_bytes()));
+    try!(s.write_all(b"\n"));
+    Ok(())
 }
 
 fn echo_str(str: std::string::String, s: &mut BufStream<TcpStream>) -> std::io::Result<()>{
-    //s.write_all(str.as_bytes()).and_then(s.write_all(b"\n").and_then(s.flush()));
-    s.write_all(str.as_bytes());
-    s.write_all(b"\n");
-    s.flush()
+    try!(s.write_all(str.as_bytes()));
+    try!(s.write_all(b"\n"));
+    try!(s.flush());
+    Ok(())
 }
 
-fn handler(s: &mut BufStream<TcpStream>){
+fn handler(s: &mut BufStream<TcpStream>) -> bool{
     // Until the user does not request to close.
     loop{
         let _ = s.write(b"> ");
@@ -46,7 +50,10 @@ fn handler(s: &mut BufStream<TcpStream>){
         let main_cmd = cmd_splt[0];
         // Here goes the command processing.
         match main_cmd{
-            "exit" => break,
+            "exit" => return false,
+            "kill" => return true,
+            "cfgport" => {},
+            "cfgpwd" => {},
             _ => match Command::new(main_cmd).args(&args).stdout(Stdio::piped()).spawn() {
                 Err(why) => {
                     match echo_err(why, s){
