@@ -22,17 +22,23 @@ fn main(){
     }
 }
 
-fn echo_err(why: std::io::Error, s: &mut BufStream<TcpStream>)-> std::io::Result<()>{
-    try!(s.write_all(why.description().as_bytes()));
-    try!(s.write_all(b"\n"));
-    Ok(())
+fn echo_ln(s: &mut BufStream<TcpStream>){
+    match s.write_all(b"\n") {
+        Err(_) => {},
+        Ok(_) =>{},
+    }
+    match s.flush() {
+        Err(_) => {},
+        Ok(_) =>{},
+    }
 }
 
-fn echo_str(str: std::string::String, s: &mut BufStream<TcpStream>) -> std::io::Result<()>{
-    try!(s.write_all(str.as_bytes()));
-    try!(s.write_all(b"\n"));
-    try!(s.flush());
-    Ok(())
+fn echo_str(str: std::string::String, s: &mut BufStream<TcpStream>){
+    match s.write_all(str.as_bytes()){
+        Err(why) => println!("could not reply {:?}", why),
+        Ok(_) => {}
+    }
+    echo_ln(s);
 }
 
 fn handler(s: &mut BufStream<TcpStream>) -> bool{
@@ -55,38 +61,21 @@ fn handler(s: &mut BufStream<TcpStream>) -> bool{
             "cfgport" => {},
             "cfgpwd" => {},
             _ => match Command::new(main_cmd).args(&args).stdout(Stdio::piped()).spawn() {
-                Err(why) => {
-                    match echo_err(why, s){
-                        Err(why) => println!("could not send error {:?}", why),
-                        Ok(_) =>{}
-                    }
-                },
+                Err(why) => echo_str(why.description().to_string(), s),
                 Ok(process) => {
                     let mut stde = String::new();
                     match process.stderr {
                         Some(mut err) => {
                             match err.read_to_string(&mut stde) {
-                                Err(why) => match echo_err(why, s){
-                                    Err(why) => println!("could not send error {:?}", why),
-                                    Ok(_) =>{}
-                                },
-                                Ok(_) => match echo_str(stde, s){
-                                    Err(why) => println!("{:?}", why),
-                                    Ok(_) =>{}
-                                },
+                                Err(why) => echo_str(why.description().to_string(), s),
+                                Ok(_) => echo_str(stde.to_string(), s)
                             };
                         },
                         None => {
                             let mut stdo = String::new();
                             match process.stdout.unwrap().read_to_string(&mut stdo) {
-                                Err(why) => match echo_err(why, s){
-                                    Err(why) => println!("could not send error {:?}", why),
-                                    Ok(_) =>{}
-                                },
-                                Ok(_) => match echo_str(stdo, s){
-                                    Err(why) => println!("{:?}", why),
-                                    Ok(_) =>{}
-                                },
+                                Err(why) => echo_str(why.description().to_string(), s),
+                                Ok(_) => echo_str(stdo.to_string(), s)
                             }
                         }
                     }
