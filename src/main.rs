@@ -1,44 +1,20 @@
-//#![feature(rustc_private)]
 extern crate bufstream;
-extern crate getopts;
-
-use getopts::Options;
-use std::env;
 use std::net::{TcpListener, TcpStream};
 use std::io::{Write, BufRead, Read};
 use bufstream::BufStream;
 use std::error::Error;
 use std::process::{Command, Stdio};
 
+#[derive(Clone)]
 struct Config {
     die: bool,
     port: String
 }
 
+const DEFAULT_PORT: &'static str = "8000";
+
 fn main(){
-    // argument parsing to create the initial configuration
-    let args: Vec<String> = env::args().collect();
-    let mut opts = Options::new();
-    let brief = format!("Usage: {} [options]", args[0].clone());
-    opts.optopt("p", "port", "set binding port", "PORT");
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => (m),
-        Err(why) => {
-            println!("{}", why);
-            print!("{}", opts.usage(&brief));
-            return
-        }
-    };
-    let port;
-    match matches.opt_str("p"){
-        None => {
-            println!("must specify a port");
-            print!("{}", opts.usage(&brief));
-            return;
-        },
-        Some(p) => port = p
-    }
-    let mut config = Config{die:false, port:port};
+    let mut config = Config{die:false, port:DEFAULT_PORT.to_string()};
     let mut accept = true;
 
     while accept{
@@ -95,8 +71,12 @@ fn handler(config: &Config, s: &mut BufStream<TcpStream>) -> Config{
         let main_cmd = cmd_splt[0];
         // Here goes the command processing.
         match main_cmd{
-            "exit" => return Config{die:false, port:config.port.to_string()},
-            "kill" => return Config{die:true, port:config.port.to_string()},
+            "exit" => return config.clone(),
+            "kill" => {
+                let mut clone = config.clone();
+                clone.die = true;
+                return clone
+            },
             "cfgport" => {
                 if cmd_splt.len() == 1{
                     echo_str("[USAGE] cfgport [newport]".to_string(), s)
@@ -110,7 +90,9 @@ fn handler(config: &Config, s: &mut BufStream<TcpStream>) -> Config{
                                 Err(_) => echo_str("[NOK] port ".to_string() + new_port + " unavailable", s),
                                 Ok(_) => {
                                     echo_str("[OK] reconnect via port ".to_string() + new_port, s);
-                                    return Config{die:false, port:new_port.to_string()}
+                                    let mut clone = config.clone();
+                                    clone.port = new_port.to_string();
+                                    return clone
                                 },
                             }
                         }
