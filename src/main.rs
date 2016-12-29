@@ -1,10 +1,14 @@
 extern crate bufstream;
+extern crate crypto;
 
 use bufstream::BufStream;
 use std::error::Error;
 use std::io::{Write, BufRead, Read};
 use std::net::{TcpListener, TcpStream};
 use std::process::{Command, Stdio};
+use crypto::digest::Digest;
+use crypto::sha2::Sha512;
+
 
 #[derive(Clone)]
 struct Config {
@@ -57,6 +61,18 @@ fn echo(string: &str, s: &mut BufStream<TcpStream>){
 }
 
 fn handler(config: &Config, s: &mut BufStream<TcpStream>) -> Config{
+    // Check the password.
+    echo("Password: ", s);
+    let mut pwd = String::new();
+    s.read_line(&mut pwd).unwrap();
+    let mut hasher = Sha512::new();
+    hasher.input_str(pwd.trim().as_ref());
+
+    if hasher.result_str() != config.pwd_hash {
+        echoln("invalid password", s);
+        return config.clone()
+    }
+
     // Until the user does not request to close.
     loop{
         echo("> ", s);
