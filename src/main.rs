@@ -1,9 +1,9 @@
 extern crate bufstream;
 
-use std::net::{TcpListener, TcpStream};
-use std::io::{Write, BufRead, Read};
 use bufstream::BufStream;
 use std::error::Error;
+use std::io::{Write, BufRead, Read};
+use std::net::{TcpListener, TcpStream};
 use std::process::{Command, Stdio};
 
 #[derive(Clone)]
@@ -40,7 +40,8 @@ fn main(){
     }
 }
 
-fn echo_ln(s: &mut BufStream<TcpStream>){
+fn echoln(string: String, s: &mut BufStream<TcpStream>){
+    echo(string, s);
     match s.write_all(b"\n") {
         Err(_) => {},
         Ok(_) =>{},
@@ -51,20 +52,22 @@ fn echo_ln(s: &mut BufStream<TcpStream>){
     }
 }
 
-fn echo_str(str: std::string::String, s: &mut BufStream<TcpStream>){
-    match s.write_all(str.as_bytes()){
+fn echo(string: String, s: &mut BufStream<TcpStream>){
+    match s.write_all(string.as_bytes()){
         Err(why) => println!("could not reply {:?}", why),
         Ok(_) => {}
     }
-    echo_ln(s);
 }
 
 fn handler(config: &Config, s: &mut BufStream<TcpStream>) -> Config{
     // Until the user does not request to close.
     loop{
-        let _ = s.write(b"> ");
-        let _ = s.flush();
-        let mut line = std::string::String::new();
+        echo("> ".to_string(), s);
+        match s.flush() {
+            Err(_) => {},
+            Ok(_) =>{},
+        }
+        let mut line = String::new();
         s.read_line(&mut line).unwrap();
         let mut it = 0;
         let mut main_cmd = String::new();
@@ -88,17 +91,17 @@ fn handler(config: &Config, s: &mut BufStream<TcpStream>) -> Config{
             },
             "cfgport" => {
                 if args.len() == 0{
-                    echo_str("[USAGE] cfgport [newport]".to_string(), s)
+                    echoln("[USAGE] cfgport [port]".to_string(), s)
                 }else{
                     match args[0].parse::<i32>(){
-                        Err(_) => echo_str("[USAGE] cfgport [newport] (newport must be an integer)".to_string(), s),
+                        Err(_) => echoln("[USAGE] cfgport [port] (port must be an integer)".to_string(), s),
                         Ok(_) => {
                             let new_port = args[0]; // just for clarity
                             let addr_string = "127.0.0.1:".to_string() + new_port;
                             match TcpListener::bind(&*addr_string) {
-                                Err(_) => echo_str("[NOK] port ".to_string() + new_port + " unavailable", s),
+                                Err(_) => echoln("[NOK] port ".to_string() + new_port + " unavailable", s),
                                 Ok(_) => {
-                                    echo_str("[OK] reconnect via port ".to_string() + new_port, s);
+                                    echoln("[OK] reconnect via port ".to_string() + new_port, s);
                                     let mut clone = config.clone();
                                     clone.port = new_port.to_string();
                                     return clone
@@ -108,23 +111,36 @@ fn handler(config: &Config, s: &mut BufStream<TcpStream>) -> Config{
                     };
                 }
             },
-            "cfgpwd" => echo_str("passwords not yet implemented".to_string(), s),
+            "cfgpwd" => {
+                if args.len() == 0{
+                    echoln("[USAGE] cfgpwd [hash]".to_string(), s)
+                } else {
+                    if args[0].len() != 128 {
+                        echoln("[USAGE] cfgpwd [hash] (hash must be a 128 character SHA512 hash)".to_string(), s);
+                    } else {
+                        echoln("[OK] reconnect with new password ".to_string(), s);
+                        let mut clone = config.clone();
+                        clone.pwd_hash = args[0].to_string();
+                        return clone
+                    }
+                }
+            },
             _ => match Command::new(main_cmd).args(&args).stdout(Stdio::piped()).spawn() {
-                Err(why) => echo_str(why.description().to_string(), s),
+                Err(why) => echoln(why.description().to_string(), s),
                 Ok(process) => {
                     let mut stde = String::new();
                     match process.stderr {
                         Some(mut err) => {
                             match err.read_to_string(&mut stde) {
-                                Err(why) => echo_str(why.description().to_string(), s),
-                                Ok(_) => echo_str(stde.to_string(), s)
+                                Err(why) => echoln(why.description().to_string(), s),
+                                Ok(_) => echoln(stde.to_string(), s)
                             };
                         },
                         None => {
                             let mut stdo = String::new();
                             match process.stdout.unwrap().read_to_string(&mut stdo) {
-                                Err(why) => echo_str(why.description().to_string(), s),
-                                Ok(_) => echo_str(stdo.to_string(), s)
+                                Err(why) => echoln(why.description().to_string(), s),
+                                Ok(_) => echoln(stdo.to_string(), s)
                             }
                         }
                     }
