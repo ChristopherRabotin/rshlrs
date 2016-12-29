@@ -1,4 +1,5 @@
 extern crate bufstream;
+
 use std::net::{TcpListener, TcpStream};
 use std::io::{Write, BufRead, Read};
 use bufstream::BufStream;
@@ -8,13 +9,15 @@ use std::process::{Command, Stdio};
 #[derive(Clone)]
 struct Config {
     die: bool,
-    port: String
+    port: String,
+    pwd_hash : String
 }
 
 const DEFAULT_PORT: &'static str = "8000";
+const DEFAULT_PWD: &'static str = "2b63faf8fbc1849334e2a63f2577e8507b2cf4cadc6214c5d64f4a36c47fc66e051f97cd9633cfd4f88bca61c49050ea1c60229e28672187a566d62dff5bf209";
 
 fn main(){
-    let mut config = Config{die:false, port:DEFAULT_PORT.to_string()};
+    let mut config = Config{die:false, port:DEFAULT_PORT.to_string(), pwd_hash: DEFAULT_PWD.to_string()};
     let mut accept = true;
 
     while accept{
@@ -61,16 +64,22 @@ fn handler(config: &Config, s: &mut BufStream<TcpStream>) -> Config{
     loop{
         let _ = s.write(b"> ");
         let _ = s.flush();
-        let mut cmd = std::string::String::new();
-        s.read_line(&mut cmd).unwrap();
-        let cmd_splt : Vec<_> = cmd.as_str().split_whitespace().collect();
+        let mut line = std::string::String::new();
+        s.read_line(&mut line).unwrap();
+        let mut it = 0;
+        let mut main_cmd = String::new();
         let mut args = Vec::new();
-        for i in 1..cmd_splt.len() {
-            args.push(cmd_splt[i]);
+        for cmd in line.split_whitespace(){
+            if it == 0{
+                main_cmd = cmd.to_string();
+            }else{
+                args.push(cmd)
+            }
+            it+=1;
         }
-        let main_cmd = cmd_splt[0];
+
         // Here goes the command processing.
-        match main_cmd{
+        match main_cmd.as_ref(){
             "exit" => return config.clone(),
             "kill" => {
                 let mut clone = config.clone();
@@ -78,13 +87,13 @@ fn handler(config: &Config, s: &mut BufStream<TcpStream>) -> Config{
                 return clone
             },
             "cfgport" => {
-                if cmd_splt.len() == 1{
+                if args.len() == 0{
                     echo_str("[USAGE] cfgport [newport]".to_string(), s)
                 }else{
-                    match cmd_splt[1].parse::<i32>(){
+                    match args[0].parse::<i32>(){
                         Err(_) => echo_str("[USAGE] cfgport [newport] (newport must be an integer)".to_string(), s),
                         Ok(_) => {
-                            let new_port = cmd_splt[1]; // just for clarity
+                            let new_port = args[0]; // just for clarity
                             let addr_string = "127.0.0.1:".to_string() + new_port;
                             match TcpListener::bind(&*addr_string) {
                                 Err(_) => echo_str("[NOK] port ".to_string() + new_port + " unavailable", s),
